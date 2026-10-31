@@ -13,7 +13,7 @@ body {
   color: #f5ecd7;
   background: radial-gradient(1000px 500px at 50% 0%, #1c2836, #0c1118 75%);
 }
-#wrap { position: relative; width: min(1180px, 100%); }
+#wrap { position: relative; width: min(1180px, 100%); width: min(1180px, 100vw, calc(100dvh * 1180 / 700)); }
 #cv {
   width: 100%; height: auto; display: block; border-radius: 10px;
   background: #0c1118; box-shadow: 0 18px 60px rgba(0,0,0,.55);
@@ -1360,7 +1360,7 @@ requestAnimationFrame(frame);
 // ---------- 手机触屏操作 ----------
 // 设计：左半屏浮动摇杆（推满=加速），右侧两个大按钮随持球状态变换功能
 // 持球：投篮(按住蓄力/松开出手) + 传球 ；无球：起跳(盖帽/抢板) + 抢断
-const isTouch = ('ontouchstart' in window) || (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0);
+var isTouch = ('ontouchstart' in window) || (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0);
 if (isTouch) {
   const joy = { active: false, id: null, cx: 0, cy: 0 };
   const joyBase = $('joyBase'), joyKnob = $('joyKnob');
@@ -1444,6 +1444,160 @@ if (isTouch) {
       mouse.sx = W2SX(mouse.wx); mouse.sy = W2SY(mouse.wy);
     }
   })();
+}
+
+/* ================= v1.1 手机适配 & 抢断手感优化 =================
+ * 以下同名函数覆盖前面的定义（JS 后声明生效） */
+
+// —— 抢断优化：距离更远、成功率更高、硬直更短、附带前扑动作 ——
+function trySteal(p) {
+  if (G.phase !== 'live' || p.stealCD > 0 || p.staggerT > 0) return;
+  const h = handler();
+  if (!h || h.team === p.team) return;
+  const d = dist(p, h);
+  if (d > 3.2) return;                       // 原来 2.6，现在更宽容
+  p.stealCD = 0.8;                           // 冷却 1.0 → 0.8
+  if (d > 1.2) {                             // 前扑一小步
+    const v = norm(h.x - p.x, h.y - p.y);
+    const lunge = Math.min(1.6, d - 1.0);
+    p.x += v.x * lunge; p.y += v.y * lunge;
+  }
+  const hSpd = Math.hypot(h.vx, h.vy);
+  const prob = (G.tut ? 0.5 : 0.22)          // 基础成功率 0.14 → 0.22
+    + (hSpd > 10 ? 0.08 : 0)                 // 对方高速运球更容易掉球
+    + (d < 1.8 ? 0.06 : 0);                  // 贴脸追加
+  const roll = Math.random();
+  if (roll < prob) {
+    flashMsg('抢断成功！', 1.2); sfx.steal();
+    if (Math.random() < 0.7) {
+      G.ball.mode = 'held'; G.ball.owner = p; G.ball.lastTouch = p.team;
+      onPossessionGain(p.team, 'steal');
+    } else looseBall(h.x, h.y, rnd(-8, 8), rnd(-8, 8), 5);
+  } else if (roll < prob + 0.06 && !G.tut) {  // 犯规率 0.10 → 0.06
+    flashMsg('防守犯规 · 球权不变', 1.4); sfx.whistle();
+    p.staggerT = 0.6; G.shotClock = shotClockMax();
+  } else {
+    p.staggerT = 0.45;                       // 扑空硬直 0.7 → 0.45
+  }
+}
+
+// —— 视图：手机端 3v3 不再给侧边栏留黑区，球场铺满 ——
+function fitView() {
+  const touch = (typeof isTouch !== 'undefined') && isTouch;
+  if (halfcourt()) {
+    const s = touch
+      ? Math.min((CW - 80) / 51, (CH - 90) / 50)
+      : Math.min((CW - 560) / 51, (CH - 100) / 50);
+    const ox = touch ? (CW - 51 * s) / 2 - 43 * s : 40 - 43 * s;
+    G.view = { s, ox, oy: (CH - 50 * s) / 2 + 20 };
+  } else {
+    const s = Math.min((CW - 52) / CT_W, (CH - 110) / CT_H);
+    G.view = { s, ox: (CW - CT_W * s) / 2, oy: (CH - CT_H * s) / 2 + 25 };
+  }
+}
+fitView();
+
+// —— HUD：手机端不画右侧按键栏 ——
+function drawHUD() {
+  ctx.fillStyle = 'rgba(10,15,22,.85)';
+  ctx.fillRect(0, 0, CW, 54);
+  ctx.textBaseline = 'middle';
+  ctx.font = '900 26px sans-serif'; ctx.textAlign = 'left';
+  ctx.fillStyle = COLORS[0]; ctx.fillText((G.twoP ? '蓝队(P1) ' : '蓝队 ') + G.scores[0], 24, 28);
+  ctx.textAlign = 'right'; ctx.fillStyle = COLORS[1]; ctx.fillText(G.scores[1] + (G.twoP ? ' 红队(P2)' : ' 红队'), CW - 24, 28);
+  ctx.fillStyle = COLORS[G.offense];
+  ctx.beginPath(); ctx.arc(G.offense === 0 ? 170 : CW - 170, 28, 6, 0, Math.PI * 2); ctx.fill();
+  ctx.textAlign = 'center';
+  ctx.fillStyle = G.shotClock < 5 ? '#ff5a5a' : '#f5ecd7';
+  ctx.font = '900 30px monospace';
+  ctx.fillText(Math.max(0, Math.ceil(G.shotClock)), CW / 2, 27);
+  ctx.font = '12px sans-serif'; ctx.fillStyle = '#9fb0c8';
+  ctx.fillText('目标 ' + TARGET_SCORE + ' 分', CW / 2, 47);
+  ctx.textAlign = 'left'; ctx.font = 'bold 14px sans-serif';
+  ctx.fillStyle = G.tactic[0] === 'man' ? '#7cf29a' : '#ffd58a';
+  ctx.fillText('蓝队防守：' + (G.tactic[0] === 'man' ? '人盯人 [1]' : '区域联防 [2]'), 200, 28);
+  if (G.twoP) {
+    ctx.textAlign = 'right';
+    ctx.fillStyle = G.tactic[1] === 'man' ? '#7cf29a' : '#ffd58a';
+    ctx.fillText((G.tactic[1] === 'man' ? '人盯人 [9]' : '区域联防 [0]') + ' ：红队防守', CW - 200, 28);
+  }
+  const h = handler();
+  if (G.mustClear && h && h.team === 0) {
+    ctx.textAlign = 'left';
+    ctx.fillStyle = (Math.floor(G.time * 3) % 2) ? '#ff5a5a' : '#ffd58a';
+    ctx.fillText('⚠ 先洗球出三分线', 370, 28);
+  }
+  if (halfcourt() && !((typeof isTouch !== 'undefined') && isTouch)) {
+    ctx.textAlign = 'left'; ctx.font = '13px sans-serif'; ctx.fillStyle = '#9fb0c8';
+    const x = 950; let y = 110;
+    const lines = G.twoP ? [
+      '—— P1 蓝队 ——', 'WASD 移动', '空格 投篮/起跳', 'E 传球 · F 抢断', '左Shift 加速 · 1/2 战术',
+      '—— P2 红队 ——', '方向键 移动', '. 投篮/起跳', ', 传球 · / 抢断', '右Shift 加速 · 9/0 战术', 'Esc 暂停',
+    ] : [
+      '—— 操作 ——', 'WASD 移动', '空格/左键 蓄力投篮', 'E/右键 传球', '防守时：', '空格 起跳盖帽/抢板', 'F/右键 抢断', '1 盯人 · 2 联防', 'Shift 加速', 'Esc 暂停',
+    ];
+    for (const l of lines) { ctx.fillText(l, x, y); y += 24; }
+  }
+}
+
+// —— 教程：手机端显示触屏文案 ——
+const T_TEXTS_TOUCH = [
+  '左侧屏幕按住拖动 = 移动，走进绿色光圈',
+  '摇杆一推到底 = 加速跑，跑到远处的光圈',
+  '点右下「传球」把球传给队友',
+  '按住「投篮」蓄力，指针进绿区后松手',
+  '靠近红色持球人，点「抢断」把球抢到手',
+  '球打铁弹出后，点「起跳」抢下篮板',
+  '罚球：指针停在中间绿区，点「出手」',
+  '点左上角按钮，切换 盯人 / 联防（各试一次）',
+  '教程完成！点击屏幕任意处返回主菜单',
+];
+
+function drawTutorial() {
+  const T = G.tut;
+  const touch = (typeof isTouch !== 'undefined') && isTouch;
+  if (T.marker) {
+    const s = G.view.s, r = (2 + Math.sin(G.time * 5) * 0.3) * s;
+    ctx.strokeStyle = '#7cf29a'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(W2SX(T.marker.x), W2SY(T.marker.y), r, 0, Math.PI * 2); ctx.stroke();
+  }
+  ctx.fillStyle = 'rgba(10,15,22,.88)';
+  ctx.fillRect(CW / 2 - 380, 12, 760, 74);
+  ctx.strokeStyle = '#ffb84d'; ctx.lineWidth = 2;
+  ctx.strokeRect(CW / 2 - 380, 12, 760, 74);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ffd58a'; ctx.font = 'bold 15px sans-serif';
+  ctx.fillText(`新手教程  ${T.i + 1} / ${T_STEPS.length}`, CW / 2, 32);
+  ctx.fillStyle = '#f5ecd7'; ctx.font = 'bold 20px sans-serif';
+  ctx.fillText(touch ? T_TEXTS_TOUCH[T.i] : T_STEPS[T.i].text, CW / 2, 62);
+}
+
+// 手机端教程最后一步：点屏幕任意处退出
+cv.addEventListener('touchstart', e => {
+  if (G.tut && G.tut.i === T_STEPS.length - 1) { e.preventDefault(); exitTutorial(); }
+}, { passive: false });
+
+// —— 罚球提示匹配手机端 ——
+function drawFTBar() {
+  const ft = G.ft;
+  const touch = (typeof isTouch !== 'undefined') && isTouch;
+  const w = 340, h = 26, x = CW / 2 - w / 2, y = CH - 90;
+  ctx.fillStyle = 'rgba(10,15,22,.85)'; ctx.fillRect(x - 16, y - 40, w + 32, h + 76);
+  ctx.fillStyle = '#f5ecd7'; ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'center';
+  const who = ft.shooter === user()
+    ? (touch ? '点「出手」按钮' : '按 空格 出手')
+    : ft.shooter === p2() ? '按 . 出手' : '对方罚球';
+  ctx.fillText(`罚球 ${ft.total - ft.left + 1}/${ft.total} · ${who}`, CW / 2, y - 18);
+  ctx.fillStyle = '#223048'; ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = 'rgba(124,242,154,.5)'; ctx.fillRect(x + w * 0.42, y, w * 0.16, h);
+  ctx.fillStyle = '#ff5a5a'; ctx.fillRect(x + ft.marker * w - 2, y - 4, 4, h + 8);
+}
+
+// —— 微信内置浏览器提示：用系统浏览器打开体验更佳 ——
+if ((typeof isTouch !== 'undefined') && isTouch && typeof navigator !== 'undefined' && /MicroMessenger/i.test(navigator.userAgent)) {
+  const rh = $('rotateHint');
+  rh.textContent = '建议点右上角 ··· → 在浏览器打开，全屏体验更佳';
+  rh.style.display = 'block';
 }
 
 </script>
