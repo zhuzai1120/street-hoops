@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>街篮 Street Hoops</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -58,6 +58,37 @@ button:active { transform: translateY(2px); box-shadow: none; }
 }
 .vs-btn { flex: 1; padding: 10px; border-radius: 10px; cursor: pointer; background: #223048; color: #f5ecd7; border: 2px solid #3a4c6b; font-size: 15px; font-weight: 700; font-family: inherit; }
 .vs-btn.selected { border-color: #ffb84d; background: #2d3d5c; color: #ffd58a; }
+
+/* ---- 手机触屏控件 ---- */
+#cv { touch-action: none; }
+#touchUI { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
+#joyBase {
+  position: absolute; width: 120px; height: 120px; border-radius: 50%;
+  background: rgba(255,255,255,.08); border: 2px solid rgba(255,255,255,.25);
+  display: none; pointer-events: none;
+}
+#joyKnob {
+  position: absolute; left: 35px; top: 35px; width: 50px; height: 50px;
+  border-radius: 50%; background: rgba(255,255,255,.4);
+}
+.tbtn {
+  position: absolute; pointer-events: auto; display: grid; place-items: center;
+  border-radius: 50%; background: rgba(24,34,51,.78); border: 2px solid #d8c99f;
+  color: #f5ecd7; font-weight: 700; font-family: inherit;
+  user-select: none; -webkit-user-select: none; touch-action: none;
+}
+.tbtn:active { background: rgba(255,184,77,.5); }
+#btnShoot { right: 4%; bottom: 5%; width: 96px; height: 96px; font-size: 20px; }
+#btnPass { right: 14%; bottom: 15%; width: 74px; height: 74px; font-size: 16px; }
+#btnTactic { left: 2%; top: 62px; width: 60px; height: 38px; border-radius: 10px; font-size: 13px; }
+#rotateHint {
+  display: none; position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+  z-index: 7; padding: 4px 12px; border-radius: 8px; font-size: 12px;
+  background: rgba(24,34,51,.8); color: #ffd58a; pointer-events: none;
+}
+@media (orientation: portrait) and (pointer: coarse) {
+  #rotateHint { display: block; }
+}
 .help { margin-top: 18px; font-size: 12.5px; line-height: 2; color: #9fb0c8; }
 .go-score { font-size: 44px; font-weight: 900; letter-spacing: 4px; color: #ffd58a; margin-bottom: 14px; }
 
@@ -67,6 +98,15 @@ button:active { transform: translateY(2px); box-shadow: none; }
 <div id="wrap">
   <canvas id="cv" width="1180" height="700"></canvas>
   <button id="pauseBtn" title="暂停 (Esc)">⏸</button>
+  <div id="rotateHint">📱 横屏体验更佳</div>
+
+  <!-- 手机触屏控件 -->
+  <div id="touchUI" class="hidden">
+    <div id="joyBase"><div id="joyKnob"></div></div>
+    <div class="tbtn" id="btnShoot">投篮</div>
+    <div class="tbtn" id="btnPass">传球</div>
+    <div class="tbtn" id="btnTactic">盯人</div>
+  </div>
 
   <!-- 主菜单 -->
   <div id="menu" class="overlay">
@@ -1316,6 +1356,95 @@ function frame(t) {
   }
 }
 requestAnimationFrame(frame);
+
+// ---------- 手机触屏操作 ----------
+// 设计：左半屏浮动摇杆（推满=加速），右侧两个大按钮随持球状态变换功能
+// 持球：投篮(按住蓄力/松开出手) + 传球 ；无球：起跳(盖帽/抢板) + 抢断
+const isTouch = ('ontouchstart' in window) || (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0);
+if (isTouch) {
+  const joy = { active: false, id: null, cx: 0, cy: 0 };
+  const joyBase = $('joyBase'), joyKnob = $('joyKnob');
+  $('touchUI').classList.remove('hidden');
+
+  function setJoyKeys(dx, dy, mag) {
+    keys['w'] = dy < -0.35; keys['s'] = dy > 0.35;
+    keys['a'] = dx < -0.35; keys['d'] = dx > 0.35;
+    keys['shift'] = mag > 0.85;
+  }
+  function joyEnd() {
+    joy.active = false; joy.id = null;
+    joyBase.style.display = 'none';
+    keys['w'] = keys['a'] = keys['s'] = keys['d'] = keys['shift'] = false;
+  }
+  function toLocal(t) {
+    const r = cv.getBoundingClientRect();
+    return { x: t.clientX - r.left, y: t.clientY - r.top, w: r.width };
+  }
+
+  cv.addEventListener('touchstart', e => {
+    e.preventDefault();
+    for (const t of e.changedTouches) {
+      const p = toLocal(t);
+      if (!joy.active && p.x < p.w * 0.5) {   // 左半屏出现摇杆
+        joy.active = true; joy.id = t.identifier; joy.cx = p.x; joy.cy = p.y;
+        joyBase.style.display = 'block';
+        joyBase.style.left = (p.x - 60) + 'px';
+        joyBase.style.top = (p.y - 60) + 'px';
+        joyKnob.style.transform = 'translate(0px,0px)';
+      }
+    }
+  }, { passive: false });
+
+  cv.addEventListener('touchmove', e => {
+    e.preventDefault();
+    for (const t of e.changedTouches) {
+      if (t.identifier !== joy.id) continue;
+      const p = toLocal(t);
+      let dx = (p.x - joy.cx) / 55, dy = (p.y - joy.cy) / 55;
+      const mag = Math.min(1, Math.hypot(dx, dy));
+      const n = norm(dx, dy);
+      dx = n.x * mag; dy = n.y * mag;
+      joyKnob.style.transform = `translate(${dx * 38}px,${dy * 38}px)`;
+      setJoyKeys(dx, dy, mag);
+    }
+  }, { passive: false });
+
+  const endHandler = e => { for (const t of e.changedTouches) if (t.identifier === joy.id) joyEnd(); };
+  cv.addEventListener('touchend', endHandler);
+  cv.addEventListener('touchcancel', endHandler);
+
+  const bindBtn = (id, key) => {
+    const el = $(id);
+    el.addEventListener('touchstart', e => { e.preventDefault(); keys[key] = true; }, { passive: false });
+    el.addEventListener('touchend', e => { e.preventDefault(); keys[key] = false; }, { passive: false });
+    el.addEventListener('touchcancel', () => { keys[key] = false; });
+  };
+  bindBtn('btnShoot', ' ');
+  bindBtn('btnPass', 'e');
+  $('btnTactic').addEventListener('touchstart', e => {
+    e.preventDefault();
+    setTactic(0, G.tactic[0] === 'man' ? 'zone' : 'man');
+    $('btnTactic').textContent = G.tactic[0] === 'man' ? '盯人' : '联防';
+  }, { passive: false });
+
+  // 每帧：合成传球瞄准方向（摇杆方向 > 面朝方向），并刷新按钮文字
+  (function touchLoop() {
+    requestAnimationFrame(touchLoop);
+    if (G.screen !== 'play') return;
+    const me = user(); if (!me) return;
+    const hasBall = handler() === me;
+    $('btnShoot').textContent = G.phase === 'freethrow' ? '出手' : (hasBall ? '投篮' : '起跳');
+    $('btnPass').textContent = hasBall ? '传球' : '抢断';
+    if (hasBall) {
+      let dx = (keys['d'] ? 1 : 0) - (keys['a'] ? 1 : 0);
+      let dy = (keys['s'] ? 1 : 0) - (keys['w'] ? 1 : 0);
+      if (!dx && !dy) { const f = norm(me.fx, me.fy); dx = f.x; dy = f.y; }
+      const n = norm(dx, dy);
+      mouse.wx = me.x + n.x * 12; mouse.wy = me.y + n.y * 12;
+      mouse.sx = W2SX(mouse.wx); mouse.sy = W2SY(mouse.wy);
+    }
+  })();
+}
 
 </script>
 </body>
