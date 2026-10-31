@@ -1,0 +1,1322 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>街篮 Street Hoops</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: #10151c; }
+body {
+  display: grid; place-items: center; padding: 12px;
+  font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
+  color: #f5ecd7;
+  background: radial-gradient(1000px 500px at 50% 0%, #1c2836, #0c1118 75%);
+}
+#wrap { position: relative; width: min(1180px, 100%); }
+#cv {
+  width: 100%; height: auto; display: block; border-radius: 10px;
+  background: #0c1118; box-shadow: 0 18px 60px rgba(0,0,0,.55);
+  cursor: crosshair;
+}
+.overlay {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  background: rgba(8, 12, 18, .78); border-radius: 10px; z-index: 10;
+}
+.overlay.hidden { display: none; }
+.panel {
+  width: min(560px, 92%); text-align: center; padding: 30px 28px;
+  background: #182233; border: 2px solid #d8c99f; border-radius: 14px;
+  box-shadow: 8px 8px 0 rgba(0,0,0,.45);
+}
+h1 { font-size: 40px; letter-spacing: 6px; margin-bottom: 4px; }
+h1 span { display: block; font-size: 14px; letter-spacing: 10px; color: #ffb84d; margin-bottom: 20px; }
+h2 { font-size: 30px; letter-spacing: 8px; margin-bottom: 18px; }
+.row { display: flex; gap: 12px; justify-content: center; margin-bottom: 14px; }
+.row-label { font-size: 13px; color: #b9c4d6; margin-bottom: 8px; }
+.mode-btn, .tac-btn {
+  flex: 1; padding: 12px 10px; border-radius: 10px; cursor: pointer;
+  background: #223048; color: #f5ecd7; border: 2px solid #3a4c6b;
+  font-size: 17px; font-weight: 700; font-family: inherit;
+}
+.mode-btn small { display: block; font-size: 11px; font-weight: 400; color: #9fb0c8; margin-top: 5px; }
+.mode-btn.selected, .tac-btn.selected { border-color: #ffb84d; background: #2d3d5c; color: #ffd58a; }
+#startBtn, #resumeBtn, #restartBtn, #quitBtn, #againBtn, #menuBtn {
+  display: block; width: 100%; margin: 10px 0 0; padding: 13px;
+  font-size: 19px; font-weight: 800; letter-spacing: 4px; font-family: inherit;
+  color: #18220f; background: #ffb84d; border: none; border-radius: 10px; cursor: pointer;
+  box-shadow: 0 4px 0 #b57e22;
+}
+#restartBtn, #menuBtn, #quitBtn { background: #2d3d5c; color: #f5ecd7; box-shadow: 0 4px 0 #1a2438; }
+button:hover { filter: brightness(1.1); }
+button:active { transform: translateY(2px); box-shadow: none; }
+#tutBtn.secondary { background: #2d3d5c; color: #f5ecd7; box-shadow: 0 4px 0 #1a2438; font-size: 16px; }
+#pauseBtn {
+  position: absolute; top: 10px; right: 12px; z-index: 5;
+  width: 40px; height: 40px; border-radius: 10px; border: 2px solid #d8c99f;
+  background: rgba(24,34,51,.85); color: #f5ecd7; font-size: 18px; cursor: pointer;
+}
+.vs-btn { flex: 1; padding: 10px; border-radius: 10px; cursor: pointer; background: #223048; color: #f5ecd7; border: 2px solid #3a4c6b; font-size: 15px; font-weight: 700; font-family: inherit; }
+.vs-btn.selected { border-color: #ffb84d; background: #2d3d5c; color: #ffd58a; }
+.help { margin-top: 18px; font-size: 12.5px; line-height: 2; color: #9fb0c8; }
+.go-score { font-size: 44px; font-weight: 900; letter-spacing: 4px; color: #ffd58a; margin-bottom: 14px; }
+
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="cv" width="1180" height="700"></canvas>
+  <button id="pauseBtn" title="暂停 (Esc)">⏸</button>
+
+  <!-- 主菜单 -->
+  <div id="menu" class="overlay">
+    <div class="panel">
+      <h1>街篮 <span>STREET HOOPS</span></h1>
+      <div class="row">
+        <button class="mode-btn selected" data-mode="3v3">3V3 半场<small>先到 21 分 · 12 秒进攻 · 换攻洗球</small></button>
+        <button class="mode-btn" data-mode="5v5">5V5 全场<small>先到 21 分 · 24 秒进攻 · 底线发球</small></button>
+      </div>
+      <div class="row-label">对战模式</div>
+      <div class="row">
+        <button class="vs-btn selected" data-vs="1p">单人 · 对电脑</button>
+        <button class="vs-btn" data-vs="2p">双人 · 同屏对战</button>
+      </div>
+      <div class="row-label">蓝队默认防守战术（游戏中 P1 按 1/2 · P2 按 9/0 随时切换）</div>
+      <div class="row">
+        <button class="tac-btn selected" data-tac="man">人盯人</button>
+        <button class="tac-btn" data-tac="zone">区域联防</button>
+      </div>
+      <button id="startBtn">开 球 ▶</button>
+      <button id="tutBtn" class="secondary">📖 新手教程</button>
+      <div class="help">
+        <b>P1（蓝队）：</b>WASD 移动 · 空格/左键 蓄力投篮（无球=起跳）· E/右键 传球（无球=抢断）· F 抢断 · Shift 加速 · 1/2 切战术<br>
+        <b>P2（红队·双人）：</b>方向键移动 · <b>.</b> 蓄力投篮/起跳 · <b>,</b> 传球 · <b>/</b> 抢断 · 右Shift 加速 · 9/0 切战术<br>
+        固定操控各自的 1 号球员，不会自动换人 · Esc 或右上角按钮暂停
+      </div>
+    </div>
+  </div>
+
+  <!-- 暂停 -->
+  <div id="pause" class="overlay hidden">
+    <div class="panel">
+      <h2>暂 停</h2>
+      <button id="resumeBtn">继续比赛</button>
+      <button id="restartBtn">重新开始</button>
+      <button id="quitBtn">回主菜单</button>
+      <div class="help">
+        进攻：WASD 移动 · 空格/左键蓄力投篮 · E/右键传球 · Shift 加速<br>
+        防守：空格/左键起跳 · F/右键抢断 · Tab 换人 · 1 盯人 · 2 联防
+      </div>
+    </div>
+  </div>
+
+  <!-- 终场 -->
+  <div id="gameover" class="overlay hidden">
+    <div class="panel">
+      <h2 id="goTitle">比赛结束</h2>
+      <div id="goScore" class="go-score"></div>
+      <button id="againBtn">再来一局</button>
+      <button id="menuBtn">回主菜单</button>
+    </div>
+  </div>
+</div>
+<script>
+'use strict';
+/* ============================================================
+ * 街篮 Street Hoops —— 俯视 2D 篮球
+ * 3v3 半场 / 5v5 全场 · 单人 / 同屏双人 · 教程 · 盯人/联防
+ * 固定操控一名球员（P1=蓝队1号，P2=红队1号），不自动换人
+ * ============================================================ */
+
+// ---------- 常量（世界单位：英尺） ----------
+const CW = 1180, CH = 700;
+const CT_W = 94, CT_H = 50;
+const RIM_R = { x: 88.75, y: 25 }, RIM_L = { x: 5.25, y: 25 };
+const RIM_H = 10, GRAV = 32, THREE_R = 23.75;
+const TARGET_SCORE = 21;
+const COLORS = ['#3b82f6', '#ef4444'];
+const COLORS_DK = ['#1e4fd8', '#b91c1c'];
+const RING = ['#7cf29a', '#ffd58a'];           // P1 绿圈 / P2 黄圈
+const NAMES = ['蓝队', '红队'];
+
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+
+// ---------- 全局状态 ----------
+const G = {
+  screen: 'menu',          // menu | play
+  mode: '3v3',
+  phase: 'live',           // live | freethrow | gameover
+  paused: false,
+  players: [],
+  ball: null,
+  offense: 0,
+  scores: [0, 0],
+  tactic: ['man', 'man'],
+  shotClock: 12,
+  mustClear: false,
+  twoP: false,             // 双人对战
+  userIdx: 0,              // P1 固定操控
+  p2Idx: null,             // P2 固定操控（双人时 = 红队1号）
+  msg: null, msgT: 0,
+  view: { s: 12, ox: 26, oy: 80 },
+  ft: null,
+  time: 0,
+  tut: null,               // 教程状态
+};
+
+// ---------- 工具 ----------
+const rnd = (a, b) => a + Math.random() * (b - a);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const norm = (x, y) => { const d = Math.hypot(x, y) || 1; return { x: x / d, y: y / d }; };
+const lerp = (a, b, t) => a + (b - a) * t;
+
+function halfcourt() { return G.mode === '3v3'; }
+function numPlayers() { return halfcourt() ? 3 : 5; }
+function atkRim(team) { return halfcourt() ? RIM_R : (team === 0 ? RIM_R : RIM_L); }
+function defRim(team) { return halfcourt() ? RIM_R : (team === 0 ? RIM_L : RIM_R); }
+function rimDir(rim) { return rim.x > 50 ? -1 : 1; }
+function shotClockMax() { return halfcourt() ? 12 : 24; }
+
+function isThree(x, y, rim) {
+  const d = Math.hypot(x - rim.x, y - rim.y);
+  if (d > THREE_R + 0.15) return true;
+  const corner = rim.x > 50 ? (x > 79.6) : (x < 14.4);
+  return corner && Math.abs(y - 25) > 20;
+}
+
+function offSpots(rim, n) {
+  const d = rimDir(rim);
+  const all = [
+    { x: rim.x + d * 23.5, y: 25 },
+    { x: rim.x + d * 17, y: 9 },
+    { x: rim.x + d * 17, y: 41 },
+    { x: rim.x + d * 3.5, y: 5 },
+    { x: rim.x + d * 3.5, y: 45 },
+  ];
+  return n === 3 ? [all[0], all[1], all[2]] : all;
+}
+
+function zoneAnchors(rim, n) {
+  const d = rimDir(rim);
+  if (n === 3) return [
+    { x: rim.x + d * 14, y: 25 },
+    { x: rim.x + d * 5, y: 15 },
+    { x: rim.x + d * 5, y: 35 },
+  ];
+  return [
+    { x: rim.x + d * 14, y: 18 },
+    { x: rim.x + d * 14, y: 32 },
+    { x: rim.x + d * 5.5, y: 12 },
+    { x: rim.x + d * 4, y: 25 },
+    { x: rim.x + d * 5.5, y: 38 },
+  ];
+}
+
+// ---------- 视图 ----------
+function fitView() {
+  if (halfcourt()) {
+    const s = Math.min((CW - 560) / 51, (CH - 100) / 50);
+    G.view = { s, ox: 40 - 43 * s, oy: (CH - 50 * s) / 2 + 20 };
+  } else {
+    const s = Math.min((CW - 52) / CT_W, (CH - 110) / CT_H);
+    G.view = { s, ox: (CW - CT_W * s) / 2, oy: (CH - CT_H * s) / 2 + 25 };
+  }
+}
+const W2SX = x => G.view.ox + x * G.view.s;
+const W2SY = y => G.view.oy + y * G.view.s;
+const S2WX = x => (x - G.view.ox) / G.view.s;
+const S2WY = y => (y - G.view.oy) / G.view.s;
+
+// ---------- 音效 ----------
+let AC = null;
+function beep(freq, dur, type = 'square', vol = 0.06) {
+  try {
+    if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)();
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.value = vol; g.exponentialRampToValueAtTime(0.001, AC.currentTime + dur);
+    o.connect(g); g.connect(AC.destination);
+    o.start(); o.stop(AC.currentTime + dur);
+  } catch (e) { /* ignore */ }
+}
+const sfx = {
+  score: () => { beep(880, .12); setTimeout(() => beep(1320, .2), 100); },
+  three: () => { beep(880, .1); setTimeout(() => beep(1100, .1), 90); setTimeout(() => beep(1560, .25), 180); },
+  whistle: () => beep(2200, .25, 'square', .05),
+  steal: () => beep(660, .1, 'sawtooth'),
+  block: () => beep(300, .15, 'sawtooth', .08),
+  rim: () => beep(180, .08, 'triangle', .08),
+  swish: () => beep(1200, .06, 'sine', .04),
+  ok: () => { beep(980, .08, 'sine'); setTimeout(() => beep(1470, .12, 'sine'), 80); },
+};
+
+// ---------- 输入 ----------
+const keys = {};    // e.key（小写）—— P1
+const codes = {};   // e.code —— P2 与左右 Shift
+const mouse = { sx: CW / 2, sy: CH / 2, wx: 47, wy: 25, l: false, r: false };
+
+addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if (e.key === 'Tab' || e.key === ' ' || e.key === '/') e.preventDefault();
+  keys[k] = true; codes[e.code] = true;
+  if (G.screen !== 'play') return;
+  if (k === 'escape' || k === 'p') togglePause();
+  if (G.tut && G.tut.i === T_STEPS.length - 1 && e.key === 'Enter') { exitTutorial(); return; }
+  if (G.paused) return;
+  if (k === '1') setTactic(0, 'man');
+  if (k === '2') setTactic(0, 'zone');
+  if (G.twoP) { if (k === '9') setTactic(1, 'man'); if (k === '0') setTactic(1, 'zone'); }
+});
+addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; codes[e.code] = false; });
+cv.addEventListener('contextmenu', e => e.preventDefault());
+cv.addEventListener('mousemove', e => {
+  const r = cv.getBoundingClientRect();
+  mouse.sx = (e.clientX - r.left) * (CW / r.width);
+  mouse.sy = (e.clientY - r.top) * (CH / r.height);
+  mouse.wx = S2WX(mouse.sx); mouse.wy = S2WY(mouse.sy);
+});
+cv.addEventListener('mousedown', e => {
+  if (e.button === 0) mouse.l = true;
+  if (e.button === 2) mouse.r = true;
+});
+addEventListener('mouseup', e => {
+  if (e.button === 0) mouse.l = false;
+  if (e.button === 2) mouse.r = false;
+});
+
+// ---------- 实体 ----------
+function makePlayer(team, idx) {
+  return {
+    team, idx, num: idx + 1,
+    x: 47, y: 25, vx: 0, vy: 0, fx: 1, fy: 0,
+    jumpT: 0, staggerT: 0, stealCD: 0,
+    plan: null, planT: 0, cutT: rnd(2, 6), cutBack: 0,
+    charge: null, frozen: false,
+  };
+}
+
+function newBall() {
+  return { mode: 'loose', x: 47, y: 25, z: 4, vx: 0, vy: 0, vz: 0, owner: null, target: null, t: 0, T: 1, sx: 0, sy: 0, ex: 0, ey: 0, apex: 12, make: false, pickupCD: 0, lastTouch: -1, isThree: false, isFT: false };
+}
+
+function newGame(mode, userTactic, twoP) {
+  G.mode = mode;
+  G.twoP = !!twoP;
+  G.players = [];
+  const n = numPlayers();
+  for (let t = 0; t < 2; t++) for (let i = 0; i < n; i++) G.players.push(makePlayer(t, i));
+  G.ball = newBall();
+  G.scores = [0, 0];
+  G.offense = 0;
+  G.tactic = [userTactic, Math.random() < 0.5 ? 'man' : 'zone'];
+  G.shotClock = shotClockMax();
+  G.mustClear = false;
+  G.phase = 'live';
+  G.paused = false;
+  G.ft = null;
+  G.time = 0;
+  G.userIdx = 0;                          // 蓝队1号，固定
+  G.p2Idx = G.twoP ? n : null;            // 红队1号，固定
+  G.tut = null;
+  fitView();
+  if (halfcourt()) { resetFormation(0, { x: 65, y: 25 }); flashMsg(G.twoP ? '比赛开始 · 蓝队(P1)球权' : '比赛开始 · 蓝队球权'); }
+  else { resetFormation(0, { x: 4, y: 22 }); flashMsg('比赛开始 · 蓝队底线发球'); }
+}
+
+function teamPlayers(t) { return G.players.filter(p => p.team === t); }
+function handler() { return G.ball && G.ball.mode === 'held' ? G.ball.owner : null; }
+function user() { return G.players[G.userIdx]; }
+function p2() { return G.p2Idx != null ? G.players[G.p2Idx] : null; }
+function human(p) { return p === user() || p === p2(); }
+
+function resetFormation(offenseTeam, handlerPos) {
+  G.offense = offenseTeam;
+  const rim = atkRim(offenseTeam);
+  const spots = offSpots(rim, numPlayers());
+  const offs = teamPlayers(offenseTeam), defs = teamPlayers(1 - offenseTeam);
+  const h = offs[0];
+  h.x = handlerPos.x; h.y = handlerPos.y;
+  for (let i = 1; i < offs.length; i++) { offs[i].x = spots[i].x; offs[i].y = spots[i].y; }
+  const dRim = defRim(1 - offenseTeam);
+  const anchors = zoneAnchors(dRim, defs.length);
+  defs.forEach((d, i) => {
+    const man = offs[Math.min(i, offs.length - 1)];
+    if (G.tactic[1 - offenseTeam] === 'man') {
+      const v = norm(dRim.x - man.x, dRim.y - man.y);
+      d.x = man.x + v.x * 2; d.y = man.y + v.y * 2;
+    } else { d.x = anchors[i].x; d.y = anchors[i].y; }
+  });
+  G.players.forEach(p => {
+    p.x = clamp(p.x, 1.5, CT_W - 1.5); p.y = clamp(p.y, 1.5, CT_H - 1.5);
+    p.vx = p.vy = 0; p.jumpT = 0; p.staggerT = 0.4; p.charge = null; p.plan = null;
+  });
+  G.ball = newBall();
+  G.ball.mode = 'held'; G.ball.owner = h; G.ball.lastTouch = offenseTeam;
+  G.shotClock = shotClockMax();
+  G.mustClear = false;
+}
+
+function flashMsg(text, dur = 1.6) { G.msg = text; G.msgT = dur; }
+
+function setTactic(team, t) {
+  if (G.tactic[team] === t) { if (G.tut) G.tut.flags[t] = true; return; }
+  G.tactic[team] = t;
+  flashMsg(NAMES[team] + '防守：' + (t === 'man' ? '人盯人' : '区域联防'), 1.2);
+  if (G.tut) G.tut.flags[t] = true;
+}
+
+// ---------- 动作：投篮 ----------
+function nearestDef(p) {
+  let best = null, bd = 1e9;
+  for (const q of G.players) if (q.team !== p.team) { const d = dist(p, q); if (d < bd) { bd = d; best = q; } }
+  return { p: best, d: bd };
+}
+
+function shotQuality(shooter, chargeVal) {
+  const rim = atkRim(shooter.team);
+  const d = dist(shooter, rim);
+  let q = d < 4 ? .88 : d < 8 ? .68 : d < 12 ? .58 : d < 16 ? .52 : d < 20 ? .47 : d < THREE_R ? .43 : d < 27 ? .40 : d < 32 ? .34 : .27;
+  const nd = nearestDef(shooter).d;
+  if (nd < 4) q -= 0.28 * (1 - nd / 4);
+  const spd = Math.hypot(shooter.vx, shooter.vy);
+  if (spd > 8 && d > 5) q -= 0.08;
+  if (chargeVal != null) {
+    if (chargeVal >= .62 && chargeVal <= .92) q += .12;
+    else q -= .28 * Math.min(Math.abs(chargeVal - .62), Math.abs(chargeVal - .92)) / .62;
+  }
+  return clamp(q, .05, .95);
+}
+
+function startCharge(p) {
+  if (G.phase !== 'live' || handler() !== p || p.charge) return;
+  p.charge = { v: 0 };
+}
+
+function releaseShot(p) {
+  if (!p.charge) return;
+  const cv0 = p.charge.v; p.charge = null;
+  if (handler() !== p || G.phase !== 'live') return;
+
+  if (G.mustClear && p.team === G.offense && !G.tut) {
+    flashMsg('未洗球！需先把球带出三分线', 1.6); sfx.whistle();
+    turnover(p.team); return;
+  }
+
+  for (const q of G.players) {   // 盖帽
+    if (q.team !== p.team && q.jumpT > 0.12 && dist(q, p) < 3.4 && Math.random() < 0.4) {
+      flashMsg('盖帽！', 1.2); sfx.block();
+      looseBall(p.x + rnd(-1, 1), p.y + rnd(-1, 1), rnd(-6, 6), rnd(-6, 6), 7);
+      G.ball.lastTouch = 1 - p.team;
+      return;
+    }
+  }
+
+  const nd = nearestDef(p).d;   // 投篮犯规
+  if (!G.tut && nd < 2.6 && Math.random() < 0.13) {
+    const three = isThree(p.x, p.y, atkRim(p.team));
+    flashMsg('投篮犯规 · 罚' + (three ? '三' : '两') + '球', 1.8); sfx.whistle();
+    startFreeThrows(p, three ? 3 : 2);
+    return;
+  }
+
+  const rim = atkRim(p.team);
+  const three = isThree(p.x, p.y, rim);
+  const q = shotQuality(p, cv0);
+  const make = Math.random() < q;
+  const b = G.ball;
+  b.mode = 'shot'; b.owner = null; b.lastTouch = p.team;
+  b.sx = p.x; b.sy = p.y; b.t = 0; b.make = make; b.isThree = three; b.isFT = false;
+  b.T = 0.5 + dist(p, rim) * 0.028;
+  b.apex = RIM_H + 2.2 + dist(p, rim) * 0.12;
+  if (make) { b.ex = rim.x; b.ey = rim.y; }
+  else { const a = rnd(0, Math.PI * 2), r = rnd(0.5, 1.3); b.ex = rim.x + Math.cos(a) * r; b.ey = rim.y + Math.sin(a) * r * 0.7; }
+  p.fx = rim.x - p.x; p.fy = rim.y - p.y;
+  if (G.tut && p === user()) G.tut.fired = true;
+}
+
+// ---------- 动作：传球 ----------
+function passBall(p, dirX, dirY) {
+  if (handler() !== p || G.phase !== 'live' || p.charge) return;
+  const mates = teamPlayers(p.team).filter(q => q !== p);
+  if (!mates.length) return;
+  const dir = norm(dirX, dirY);
+  let best = null, bs = -2;
+  for (const m of mates) {
+    const to = norm(m.x - p.x, m.y - p.y);
+    const dot = to.x * dir.x + to.y * dir.y;
+    const openness = nearestDef(m).d;
+    const score = dot * 2 + clamp(openness / 8, 0, 1);
+    if (dot > 0.3 && score > bs) { bs = score; best = m; }
+  }
+  if (!best) best = mates.reduce((a, b) => dist(a, p) < dist(b, p) ? a : b);
+  const tx = best.x + best.vx * 0.25, ty = best.y + best.vy * 0.25;
+  const b = G.ball;
+  b.mode = 'pass'; b.owner = null; b.target = best; b.lastTouch = p.team;
+  b.sx = p.x; b.sy = p.y; b.t = 0;
+  const d = Math.hypot(tx - p.x, ty - p.y);
+  b.T = Math.max(0.18, d / 34);
+  b.ex = tx; b.ey = ty; b.apex = 6.5;
+  p.fx = tx - p.x; p.fy = ty - p.y;
+}
+
+// ---------- 动作：抢断 ----------
+function trySteal(p) {
+  if (G.phase !== 'live' || p.stealCD > 0 || p.staggerT > 0) return;
+  const h = handler();
+  if (!h || h.team === p.team) return;
+  p.stealCD = 1.0;
+  if (dist(p, h) > 2.6) return;
+  const hSpd = Math.hypot(h.vx, h.vy);
+  const prob = (G.tut ? 0.45 : 0.14) + (hSpd > 10 ? 0.08 : 0);
+  const roll = Math.random();
+  if (roll < prob) {
+    flashMsg('抢断成功！', 1.2); sfx.steal();
+    if (Math.random() < 0.7) {
+      G.ball.mode = 'held'; G.ball.owner = p; G.ball.lastTouch = p.team;
+      onPossessionGain(p.team, 'steal');
+    } else looseBall(h.x, h.y, rnd(-8, 8), rnd(-8, 8), 5);
+  } else if (roll < prob + 0.10 && !G.tut) {
+    flashMsg('防守犯规 · 球权不变', 1.4); sfx.whistle();
+    p.staggerT = 0.8; G.shotClock = shotClockMax();
+  } else {
+    p.staggerT = 0.7;
+  }
+}
+
+// ---------- 球权与得分 ----------
+function looseBall(x, y, vx, vy, z) {
+  const b = G.ball;
+  b.mode = 'loose'; b.owner = null; b.target = null;
+  b.x = x; b.y = y; b.z = z; b.vx = vx; b.vy = vy; b.vz = rnd(2, 5);
+  b.pickupCD = 0.25;
+}
+
+function onPossessionGain(team, how) {
+  G.offense = team;
+  G.shotClock = shotClockMax();
+  if (halfcourt() && (how === 'rebound' || how === 'steal') && !G.tut) {
+    G.mustClear = true; flashMsg(NAMES[team] + '球权 · 先洗球出三分线', 1.4);
+  }
+}
+
+function turnover(team) {
+  const other = 1 - team;
+  sfx.whistle();
+  if (halfcourt()) { resetFormation(other, { x: 65, y: 25 }); }
+  else { const rim = defRim(other); resetFormation(other, { x: clamp(rim.x - rimDir(rim) * 2, 1.5, 92.5), y: 22 }); }
+  flashMsg(NAMES[other] + '球权', 1.4);
+}
+
+function madeBasket(team, pts) {
+  G.scores[team] += pts;
+  sfx[pts === 3 ? 'three' : 'score']();
+  flashMsg(pts === 3 ? '三分球！' : '命中 +2', 1.3);
+  afterMadeBasket(team);
+}
+
+function afterMadeBasket(scoringTeam) {
+  if (G.scores[scoringTeam] >= TARGET_SCORE) { endGame(scoringTeam); return; }
+  const other = 1 - scoringTeam;
+  if (halfcourt()) { resetFormation(other, { x: 65, y: 25 }); if (!G.tut) flashMsg(NAMES[other] + '球权 · 弧顶发球', 1.4); }
+  else { const rim = defRim(other); resetFormation(other, { x: clamp(rim.x - rimDir(rim) * 2, 1.5, 92.5), y: 22 }); flashMsg(NAMES[other] + '底线发球', 1.4); }
+}
+
+function endGame(winner) {
+  G.phase = 'gameover';
+  const label = winner === 0 ? (G.twoP ? '🏆 蓝队(P1)获胜！' : '🏆 蓝队获胜！') : (G.twoP ? '🏆 红队(P2)获胜！' : '红队获胜');
+  document.getElementById('goTitle').textContent = label;
+  document.getElementById('goScore').textContent = G.scores[0] + ' : ' + G.scores[1];
+  document.getElementById('gameover').classList.remove('hidden');
+  sfx.score();
+}
+
+// ---------- 罚球 ----------
+function startFreeThrows(shooter, count) {
+  G.phase = 'freethrow';
+  G.ft = { shooter, left: count, total: count, marker: 0, dir: 1, done: false, autoT: null };
+  const rim = atkRim(shooter.team), d = rimDir(rim);
+  shooter.x = rim.x + d * 13.75; shooter.y = 25; shooter.vx = shooter.vy = 0;
+  let li = 0;
+  for (const p of G.players) {
+    if (p === shooter) continue;
+    const side = li % 2 === 0 ? 1 : -1, rank = (li >> 1);
+    p.x = rim.x + d * (3 + rank * 2.2);
+    p.y = 25 + side * (3 + rank * 2.5);
+    p.vx = p.vy = 0; p.jumpT = 0; p.staggerT = 0; p.charge = null;
+    li++;
+  }
+  G.ball.mode = 'held'; G.ball.owner = shooter; G.ball.z = 5;
+}
+
+function ftShoot() {
+  const ft = G.ft; if (!ft || ft.done) return;
+  ft.done = true;
+  const err = Math.abs(ft.marker - 0.5);
+  const make = Math.random() < clamp(0.95 - err * 3.4, 0.08, 0.95);
+  const rim = atkRim(ft.shooter.team);
+  const b = G.ball;
+  b.mode = 'shot'; b.owner = null; b.lastTouch = ft.shooter.team;
+  b.sx = ft.shooter.x; b.sy = ft.shooter.y; b.t = 0; b.make = make; b.isThree = false; b.isFT = true;
+  b.T = 0.75; b.apex = RIM_H + 3.5;
+  if (make) { b.ex = rim.x; b.ey = rim.y; }
+  else { const a = rnd(0, Math.PI * 2); b.ex = rim.x + Math.cos(a) * rnd(.5, 1.1); b.ey = rim.y + Math.sin(a) * rnd(.4, .8); }
+}
+
+function ftResolve(make) {
+  const ft = G.ft; if (!ft) return;
+  ft.left--;
+  if (make) { G.scores[ft.shooter.team] += 1; sfx.score(); flashMsg('罚中 +1', 1); }
+  else flashMsg('罚球不中', 1);
+  if (G.scores[ft.shooter.team] >= TARGET_SCORE && !G.tut) { endGame(ft.shooter.team); return; }
+  if (ft.left > 0) {
+    ft.marker = 0; ft.dir = 1; ft.done = false; ft.autoT = null;
+    G.ball.mode = 'held'; G.ball.owner = ft.shooter; G.ball.z = 5;
+  } else if (make) {
+    const team = ft.shooter.team; G.ft = null;
+    if (G.tut) { G.phase = 'live'; }
+    else { G.phase = 'live'; afterMadeBasketFT(team); }
+  } else {
+    const team = ft.shooter.team; G.ft = null; G.phase = 'live'; G.offense = team;
+  }
+}
+
+function afterMadeBasketFT(scoringTeam) {
+  const other = 1 - scoringTeam;
+  if (halfcourt()) { resetFormation(other, { x: 65, y: 25 }); }
+  else { const rim = defRim(other); resetFormation(other, { x: clamp(rim.x - rimDir(rim) * 2, 1.5, 92.5), y: 22 }); }
+}
+
+// ---------- AI ----------
+function moveToward(p, x, y, speed, dt) {
+  const dx = x - p.x, dy = y - p.y, d = Math.hypot(dx, dy);
+  if (d < 0.15) { p.vx = 0; p.vy = 0; return; }
+  const v = norm(dx, dy), sp = Math.min(speed, d * 6);
+  p.vx = v.x * sp; p.vy = v.y * sp;
+  p.x += p.vx * dt; p.y += p.vy * dt;
+  if (sp > 1) { p.fx = v.x; p.fy = v.y; }
+}
+
+function mySpot(p) {
+  const spots = offSpots(atkRim(p.team), numPlayers());
+  return spots[Math.min(p.idx, spots.length - 1)];
+}
+
+function defenseTarget(p) {
+  const rim = defRim(p.team);
+  const offs = teamPlayers(1 - p.team);
+  const ballH = handler();
+  if (G.tactic[p.team] === 'man') {
+    const man = offs[Math.min(p.idx, offs.length - 1)];
+    const gap = (man === ballH) ? 1.4 : 1.9;
+    const v = norm(rim.x - man.x, rim.y - man.y);
+    return { x: man.x + v.x * gap, y: man.y + v.y * gap };
+  }
+  const anchors = zoneAnchors(rim, teamPlayers(p.team).length);
+  const a = anchors[Math.min(p.idx, anchors.length - 1)];
+  const bp = ballH || G.ball;
+  let tx = a.x + (bp.x - a.x) * 0.35, ty = a.y + (bp.y - a.y) * 0.35;
+  let bestO = null, bd = 5;
+  for (const o of offs) { const d = Math.hypot(o.x - tx, o.y - ty); if (d < bd) { bd = d; bestO = o; } }
+  if (bestO && bestO !== ballH) {
+    const v = norm(rim.x - bestO.x, rim.y - bestO.y);
+    tx = bestO.x + v.x * 1.6; ty = bestO.y + v.y * 1.6;
+  }
+  if (ballH) {
+    const dh = Math.hypot(ballH.x - a.x, ballH.y - a.y);
+    if (dh < 6) { const v = norm(rim.x - ballH.x, rim.y - ballH.y); tx = ballH.x + v.x * 1.3; ty = ballH.y + v.y * 1.3; }
+  }
+  return { x: tx, y: ty };
+}
+
+function cpuHandlerThink(p, dt) {
+  p.planT -= dt;
+  const rim = atkRim(p.team), d = dist(p, rim);
+  const nd = nearestDef(p).d;
+  const mateHuman = teamPlayers(p.team).some(m => m !== p && human(m));
+
+  if (G.mustClear && p.team === G.offense) {
+    const dir = rimDir(rim);
+    moveToward(p, rim.x + dir * 27, clamp(25 + Math.sin(G.time) * 8, 5, 45), 13, dt);
+    return;
+  }
+
+  if (p.charge) {
+    p.charge.v += dt / 0.85;
+    if (p.charge.v >= p.charge.target) releaseShot(p);
+    return;
+  }
+
+  if (p.planT <= 0) {
+    p.planT = rnd(0.35, 0.6);
+    const open = nd > 4.2;
+    const urgent = G.shotClock < 3;
+    const inRange = d < 26;
+    const shootBias = mateHuman ? 0.35 : 1;    // 队里有人类队友时多喂球
+    if (urgent && inRange) p.plan = { type: 'shoot', at: rnd(.62, .9) };
+    else if (open && inRange && Math.random() < (d < 10 ? .8 : .45) * shootBias) p.plan = { type: 'shoot', at: rnd(.62, .9) };
+    else if (nd > 2.2 && d > 5) p.plan = { type: 'drive' };
+    else if (d < 6) p.plan = { type: 'shoot', at: rnd(.62, .8) };
+    else {
+      let best = null, bo = 0;
+      for (const m of teamPlayers(p.team)) {
+        if (m === p) continue;
+        const o = nearestDef(m).d, dd = dist(p, m);
+        const sc = o - dd * 0.12 + (human(m) ? 3 : 0);
+        if (sc > bo) { bo = sc; best = m; }
+      }
+      if (best && (bo > 2.5 || nd < 1.8)) p.plan = { type: 'pass', to: best };
+      else p.plan = { type: 'jab', x: clamp(p.x + rnd(-8, 8), 2, 92), y: clamp(p.y + rnd(-8, 8), 2, 48) };
+    }
+  }
+
+  switch (p.plan && p.plan.type) {
+    case 'shoot':
+      startCharge(p); if (p.charge) p.charge.target = p.plan.at; p.plan = null;
+      break;
+    case 'drive': {
+      const v = norm(rim.x - p.x, rim.y - p.y);
+      moveToward(p, rim.x + v.x * 1.5, rim.y + v.y * 1.5, 13.5, dt);
+      break;
+    }
+    case 'pass': {
+      const t = p.plan.to;
+      passBall(p, t.x - p.x, t.y - p.y);
+      p.plan = null;
+      break;
+    }
+    default:
+      moveToward(p, p.plan ? p.plan.x : p.x, p.plan ? p.plan.y : p.y, 11, dt);
+  }
+}
+
+function aiOffBall(p, dt) {
+  p.cutT -= dt;
+  const rim = atkRim(p.team);
+  if (p.cutBack > 0) {
+    p.cutBack -= dt;
+    moveToward(p, rim.x + rimDir(rim) * 3, rim.y, 13, dt);
+    return;
+  }
+  if (p.cutT <= 0) {
+    p.cutT = rnd(3, 8);
+    if (nearestDef(p).d < 2.6 && Math.random() < .6) { p.cutBack = rnd(0.9, 1.5); return; }
+  }
+  const s = mySpot(p);
+  moveToward(p, s.x, s.y, 11, dt);
+}
+
+function aiDefense(p, dt) {
+  const h = handler();
+  const t = defenseTarget(p);
+  const urgent = h && h.team !== p.team && dist(p, h) < 5;
+  moveToward(p, t.x, t.y, urgent ? 14 : 12, dt);
+
+  if (!h || h.team === p.team) return;
+  const dh = dist(p, h);
+  // AI 抢断（双人模式下红队 AI 队友也会抢断）
+  if (dh < 2.4 && p.stealCD <= 0 && Math.random() < 0.006) trySteal(p);
+  if (h.charge && dh < 3.6 && p.jumpT <= 0 && Math.random() < 0.09) p.jumpT = 0.55;
+}
+
+function aiLoose(p, dt) {
+  const b = G.ball;
+  moveToward(p, b.x, b.y, 14, dt);
+  if (b.z > 3.5 && b.z < 10 && Math.hypot(p.x - b.x, p.y - b.y) < 3.2 && p.jumpT <= 0) p.jumpT = 0.55;
+}
+
+function updateAI(p, dt) {
+  if (G.tut) { if (p.frozen) { p.vx = 0; p.vy = 0; } return; }  // 教程中 AI 冻结
+  if (G.phase === 'freethrow') {
+    if (G.ft && G.ft.done) {
+      const rim = atkRim(G.ft.shooter.team);
+      moveToward(p, rim.x + rimDir(rim) * rnd(1, 3), rim.y + rnd(-2, 2), 13, dt);
+      if (G.ball.z < 10 && G.ball.z > 4 && Math.hypot(p.x - G.ball.x, p.y - G.ball.y) < 3 && p.jumpT <= 0) p.jumpT = 0.55;
+    }
+    return;
+  }
+  if (G.phase !== 'live') return;
+
+  const b = G.ball;
+  const h = handler();
+
+  if (b.mode === 'loose') {
+    const mates = teamPlayers(p.team).slice().sort((a, c) => dist(a, b) - dist(c, b));
+    const rank = mates.indexOf(p);
+    if (rank < 2 || (rank === 2 && human(mates[0]))) { aiLoose(p, dt); return; }
+  }
+
+  if (p.team === G.offense) {
+    if (h === p) { cpuHandlerThink(p, dt); }   // 任何非人类持球者都由 AI 决策
+    else aiOffBall(p, dt);
+  } else {
+    aiDefense(p, dt);
+  }
+}
+
+// ---------- 散球/出界 ----------
+function gainBall(p) {
+  const prevOff = G.offense;
+  G.ball.mode = 'held'; G.ball.owner = p; G.ball.z = 3;
+  G.ball.vx = G.ball.vy = G.ball.vz = 0;
+  if (p.team !== prevOff) onPossessionGain(p.team, 'rebound');
+  else G.shotClock = shotClockMax();
+}
+
+function outOfBounds() {
+  sfx.whistle();
+  if (G.tut) {  // 教程里出界则捡回来
+    G.ball.x = clamp(G.ball.x, 2, 92); G.ball.y = clamp(G.ball.y, 2, 48);
+    G.ball.vx = G.ball.vy = 0;
+    return;
+  }
+  const other = 1 - (G.ball.lastTouch >= 0 ? G.ball.lastTouch : G.offense);
+  flashMsg('出界 · ' + NAMES[other] + '球权', 1.4);
+  if (halfcourt()) resetFormation(other, { x: 65, y: 25 });
+  else { const rim = defRim(other); resetFormation(other, { x: clamp(rim.x - rimDir(rim) * 2, 1.5, 92.5), y: 22 }); }
+}
+
+// ---------- 输入边沿 ----------
+const prevIn = { space: 0, e: 0, f: 0, l: 0, r: 0, p2s: 0, p2p: 0, p2t: 0 };
+function handleEdges() {
+  const sp = keys[' '] ? 1 : 0, ee = keys['e'] ? 1 : 0, ff = keys['f'] ? 1 : 0;
+  const ll = mouse.l ? 1 : 0, rr = mouse.r ? 1 : 0;
+  const me = user();
+  if (me) {
+    const myBall = handler() === me;
+    if ((sp && !prevIn.space) || (ll && !prevIn.l)) {
+      if (G.phase === 'freethrow') { if (G.ft && G.ft.shooter === me) ftShoot(); }
+      else if (G.phase === 'live') {
+        if (myBall) startCharge(me);
+        else if (me.staggerT <= 0) me.jumpT = 0.55;
+      }
+    }
+    if ((ee && !prevIn.e) || (rr && !prevIn.r)) {
+      if (G.phase === 'live') { if (myBall) passBall(me, mouse.wx - me.x, mouse.wy - me.y); else trySteal(me); }
+    }
+    if (ff && !prevIn.f && G.phase === 'live' && !myBall) trySteal(me);
+    if ((!sp && prevIn.space) || (!ll && prevIn.l)) { if (me.charge) releaseShot(me); }
+  }
+  prevIn.space = sp; prevIn.e = ee; prevIn.f = ff; prevIn.l = ll; prevIn.r = rr;
+
+  // P2：'.'投篮/起跳 · ','传球 · '/'抢断
+  const q = p2();
+  if (q) {
+    const sh = codes['Period'] ? 1 : 0, pa = codes['Comma'] ? 1 : 0, st = codes['Slash'] ? 1 : 0;
+    const qBall = handler() === q;
+    if (sh && !prevIn.p2s) {
+      if (G.phase === 'freethrow') { if (G.ft && G.ft.shooter === q) ftShoot(); }
+      else if (G.phase === 'live') {
+        if (qBall) startCharge(q);
+        else if (q.staggerT <= 0) q.jumpT = 0.55;
+      }
+    }
+    if (pa && !prevIn.p2p && G.phase === 'live') {
+      if (qBall) passBall(q, q.fx, q.fy); else trySteal(q);
+    }
+    if (st && !prevIn.p2t && G.phase === 'live' && !qBall) trySteal(q);
+    if (!sh && prevIn.p2s && q.charge) releaseShot(q);
+    prevIn.p2s = sh; prevIn.p2p = pa; prevIn.p2t = st;
+  }
+}
+
+// 人类玩家移动
+function humanMove(p, dx, dy, sprint, dt) {
+  if ((dx || dy) && p.staggerT <= 0) {
+    const v = norm(dx, dy);
+    let sp = sprint ? 18.5 : 14.5;
+    if (handler() === p) sp *= 0.9;
+    if (p.charge) sp *= 0.1;
+    p.vx = v.x * sp; p.vy = v.y * sp;
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    p.fx = v.x; p.fy = v.y;
+  } else { p.vx = 0; p.vy = 0; }
+  if (p.charge) { p.charge.v += dt / 0.95; if (p.charge.v >= 1.15) releaseShot(p); }
+}
+
+// ---------- 教程 ----------
+const T_STEPS = [
+  { text: '用 W A S D 移动，走进绿色光圈' },
+  { text: '按住 Shift 加速跑，跑到远处的光圈' },
+  { text: '按 E（或鼠标右键）把球传给队友' },
+  { text: '按住 空格 蓄力，指针进入绿区后松开投篮（出手即可）' },
+  { text: '靠近红色持球人，按 F 抢断，把球抢到手' },
+  { text: '球打铁弹出后，按 空格 起跳抢下篮板' },
+  { text: '罚球：按 空格，让指针停在中间绿区' },
+  { text: '按 1 = 人盯人，按 2 = 区域联防（两个都按一次）' },
+  { text: '教程完成！按 回车 返回主菜单开始比赛' },
+];
+
+function startTutorial() {
+  newGame('3v3', 'man', false);
+  G.tut = { i: 0, t: 0, flags: {}, marker: null, fired: false, walk: null, mate: null };
+  flashMsg('教程开始', 1.2);
+  setupTutStep(0);
+}
+
+function giveBall(p) { G.ball.mode = 'held'; G.ball.owner = p; G.ball.z = 4; G.ball.lastTouch = p.team; G.offense = p.team; }
+
+function setupTutStep(i) {
+  const T = G.tut; T.t = 0; T.fired = false; T.walk = null; T.marker = null; T.mate = null;
+  // 所有人冻结到角落
+  G.players.forEach((p, k) => {
+    p.frozen = true; p.charge = null; p.staggerT = 0; p.jumpT = 0; p.vx = p.vy = 0;
+    p.x = 48 + (k % 3) * 2.5; p.y = 44 + Math.floor(k / 3) * 2.5;
+  });
+  const me = user(); me.frozen = false;
+  const blue = teamPlayers(0), red = teamPlayers(1);
+  switch (i) {
+    case 0: me.x = 55; me.y = 35; T.marker = { x: 68, y: 25 }; giveBall(blue[2]); blue[2].x = 48; blue[2].y = 46; break;
+    case 1: me.x = 55; me.y = 42; T.marker = { x: 85, y: 8 }; giveBall(blue[2]); blue[2].x = 48; blue[2].y = 46; break;
+    case 2: me.x = 68; me.y = 25; giveBall(me); T.mate = blue[1]; T.mate.x = 80; T.mate.y = 10; break;
+    case 3: me.x = 72; me.y = 25; giveBall(me); break;
+    case 4: {
+      const r0 = red[0]; r0.x = 74; r0.y = 25; me.x = 70; me.y = 29;
+      giveBall(r0); T.walk = { p: r0, cx: 74, cy: 25, r: 3.5, a: 0 };
+      break;
+    }
+    case 5: me.x = 82; me.y = 27; giveBall(blue[2]); blue[2].x = 48; blue[2].y = 46; break;
+    case 6: giveBall(me); startFreeThrows(me, 1); break;
+    case 7: me.x = 70; me.y = 25; giveBall(me); break;
+    case 8: me.x = 70; me.y = 25; giveBall(me); break;
+  }
+}
+
+function tutNext() {
+  const T = G.tut;
+  sfx.ok();
+  flashMsg('✓ 完成', 0.9);
+  T.i++;
+  if (T.i < T_STEPS.length) setupTutStep(T.i);
+}
+
+function exitTutorial() {
+  G.tut = null;
+  G.screen = 'menu';
+  document.getElementById('menu').classList.remove('hidden');
+}
+
+function tutorialUpdate(dt) {
+  const T = G.tut; if (!T) return;
+  T.t += dt;
+  const me = user();
+  // 抢断步骤：持球人绕圈走
+  if (T.walk) {
+    const w = T.walk; w.a += dt * 1.1;
+    w.p.x = w.cx + Math.cos(w.a) * w.r; w.p.y = w.cy + Math.sin(w.a) * w.r;
+    w.p.fx = -Math.sin(w.a); w.p.fy = Math.cos(w.a);
+  }
+  const h = handler();
+  switch (T.i) {
+    case 0: case 1:
+      if (T.marker && dist(me, T.marker) < 2) tutNext();
+      break;
+    case 2:
+      if (T.mate && h === T.mate) tutNext();
+      break;
+    case 3:
+      if (T.fired && G.ball.mode !== 'shot') tutNext();
+      break;
+    case 4:
+      if (h === me) tutNext();
+      break;
+    case 5:
+      if (!T.fired && T.t > 0.5) {  // 剧本打铁
+        T.fired = true;
+        const b = G.ball;
+        b.mode = 'shot'; b.owner = null; b.lastTouch = 1; b.isFT = false; b.isThree = false;
+        b.sx = 72; b.sy = 25; b.x = 72; b.y = 25; b.t = 0; b.T = 0.7; b.apex = 13.5; b.make = false;
+        const a = rnd(0, Math.PI * 2);
+        b.ex = RIM_R.x + Math.cos(a) * 0.9; b.ey = RIM_R.y + Math.sin(a) * 0.6;
+      }
+      if (T.fired && h === me) tutNext();
+      break;
+    case 6:
+      if (T.t > 1 && !G.ft) tutNext();
+      break;
+    case 7:
+      if (T.flags.man && T.flags.zone) tutNext();
+      break;
+  }
+}
+
+// ---------- 主更新 ----------
+function update(dt) {
+  G.time += dt;
+  if (G.msgT > 0) G.msgT -= dt;
+  if (G.phase === 'gameover') return;
+
+  handleEdges();
+
+  if (G.phase === 'freethrow' && G.ft) {
+    const ft = G.ft;
+    if (!ft.done) {
+      ft.marker += ft.dir * dt / 1.05;
+      if (ft.marker > 1) { ft.marker = 1; ft.dir = -1; }
+      if (ft.marker < 0) { ft.marker = 0; ft.dir = 1; }
+      if (!human(ft.shooter)) {   // 电脑罚球
+        ft.autoT = (ft.autoT == null ? rnd(0.6, 1.4) : ft.autoT) - dt;
+        if (ft.autoT <= 0) { ft.marker = 0.5 + rnd(-0.11, 0.11); ft.autoT = null; ftShoot(); }
+      }
+    }
+  }
+
+  if (G.phase === 'live' && G.ball.mode !== 'shot' && !G.tut) {
+    G.shotClock -= dt;
+    if (G.shotClock <= 0) {
+      flashMsg((halfcourt() ? '12' : '24') + '秒进攻违例！', 1.4);
+      sfx.whistle(); turnover(G.offense);
+    }
+  }
+
+  // 人类玩家移动
+  const me = user();
+  if (me && G.phase === 'live') {
+    let dx = (keys['d'] ? 1 : 0) - (keys['a'] ? 1 : 0);
+    let dy = (keys['s'] ? 1 : 0) - (keys['w'] ? 1 : 0);
+    if (!G.twoP) {  // 单人时方向键也归 P1
+      dx += (keys['arrowright'] ? 1 : 0) - (keys['arrowleft'] ? 1 : 0);
+      dy += (keys['arrowdown'] ? 1 : 0) - (keys['arrowup'] ? 1 : 0);
+    }
+    const sprint = G.twoP ? codes['ShiftLeft'] : (keys['shift']);
+    humanMove(me, dx, dy, sprint, dt);
+  }
+  const q = p2();
+  if (q && G.phase === 'live') {
+    const dx = (keys['arrowright'] ? 1 : 0) - (keys['arrowleft'] ? 1 : 0);
+    const dy = (keys['arrowdown'] ? 1 : 0) - (keys['arrowup'] ? 1 : 0);
+    humanMove(q, dx, dy, codes['ShiftRight'], dt);
+  }
+
+  for (const p of G.players) if (!human(p)) updateAI(p, dt);
+
+  for (const p of G.players) {
+    if (p.staggerT > 0) { p.staggerT -= dt; if (p.staggerT > 0) { p.vx = 0; p.vy = 0; } }
+    if (p.jumpT > 0) p.jumpT -= dt;
+    if (p.stealCD > 0) p.stealCD -= dt;
+  }
+
+  // 碰撞
+  for (let i = 0; i < G.players.length; i++) for (let j = i + 1; j < G.players.length; j++) {
+    const a = G.players[i], b = G.players[j];
+    const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
+    if (d > 0.01 && d < 2.1) {
+      const push = (2.1 - d) / 2, ux = dx / d, uy = dy / d;
+      a.x -= ux * push; a.y -= uy * push; b.x += ux * push; b.y += uy * push;
+    }
+  }
+  for (const p of G.players) { p.x = clamp(p.x, 1.2, CT_W - 1.2); p.y = clamp(p.y, 1.2, CT_H - 1.2); }
+
+  updateBall(dt);
+
+  if (G.tut) tutorialUpdate(dt);
+
+  if (G.mustClear) {
+    const h = handler();
+    if (h && h.team === G.offense && dist(h, atkRim(h.team)) > THREE_R + 0.8) {
+      G.mustClear = false; flashMsg('已洗球 ✓', 0.8);
+    }
+  }
+}
+
+function updateBall(dt) {
+  const b = G.ball;
+  if (b.mode === 'held') {
+    const o = b.owner; if (!o) { b.mode = 'loose'; return; }
+    const f = norm(o.fx, o.fy);
+    b.x = o.x + f.x * 0.9; b.y = o.y + f.y * 0.9;
+    b.z = 3 + Math.abs(Math.sin(G.time * 9)) * 2.2;
+    b.lastTouch = o.team;
+  } else if (b.mode === 'pass') {
+    b.t += dt / b.T;
+    const u = Math.min(b.t, 1);
+    b.x = lerp(b.sx, b.ex, u); b.y = lerp(b.sy, b.ey, u);
+    b.z = 4 + (b.apex - 4) * (1 - (2 * u - 1) * (2 * u - 1));
+    for (const p of G.players) {
+      if (b.target && p.team === b.target.team) continue;
+      if (p.staggerT > 0 || p.frozen) continue;
+      if (Math.hypot(p.x - b.x, p.y - b.y) < 1.4 && b.z < 7) {
+        if (Math.random() < 0.6) {
+          flashMsg('传球被断！', 1.2); sfx.steal();
+          b.mode = 'held'; b.owner = p; b.target = null; b.z = 4;
+          onPossessionGain(p.team, 'steal');
+        } else {
+          flashMsg('传球被破坏', 1.0);
+          looseBall(b.x, b.y, rnd(-6, 6), rnd(-6, 6), b.z);
+        }
+        return;
+      }
+    }
+    if (u >= 1 && b.target) {
+      b.mode = 'held'; b.owner = b.target; b.target = null; b.z = 4;
+      beep(500, .05, 'sine', .04);
+    }
+  } else if (b.mode === 'shot') {
+    b.t += dt / b.T;
+    const u = Math.min(b.t, 1);
+    b.x = lerp(b.sx, b.ex, u); b.y = lerp(b.sy, b.ey, u);
+    b.z = (1 - u) * (1 - u) * 7 + 2 * (1 - u) * u * b.apex + u * u * RIM_H;
+    if (u >= 1) {
+      if (b.isFT) {
+        const make = b.make;
+        if (make) { looseBall(b.ex, b.ey, 0, 2, RIM_H - 1); ftResolve(true); }
+        else { sfx.rim(); looseBall(b.ex, b.ey, rnd(-9, 9), rnd(-7, 7), RIM_H); ftResolve(false); }
+      } else if (b.make) {
+        sfx.swish();
+        if (G.tut) { looseBall(b.ex, b.ey, 0, 3, RIM_H - 1); }
+        else madeBasket(b.lastTouch, b.isThree ? 3 : 2);
+      } else {
+        sfx.rim();
+        G.shotClock = shotClockMax();
+        looseBall(b.ex, b.ey, rnd(-11, 11), rnd(-9, 9), RIM_H);
+      }
+    }
+  } else {
+    if (b.pickupCD > 0) b.pickupCD -= dt;
+    b.vz -= GRAV * dt; b.z += b.vz * dt;
+    if (b.z < 0) { b.z = 0; b.vz *= -0.55; b.vx *= 0.8; b.vy *= 0.8; }
+    b.x += b.vx * dt; b.y += b.vy * dt;
+    if (b.z < 0.2) { b.vx *= (1 - 1.5 * dt); b.vy *= (1 - 1.5 * dt); }
+    if (b.x < 0 || b.x > CT_W || b.y < 0 || b.y > CT_H) { outOfBounds(); return; }
+    if (b.pickupCD <= 0) {
+      for (const p of G.players) {
+        if (p.staggerT > 0 || p.frozen) continue;
+        const reach = p.jumpT > 0 ? 2.8 : 1.4, zmax = p.jumpT > 0 ? 9.5 : 3.5;
+        if (Math.hypot(p.x - b.x, p.y - b.y) < reach && b.z < zmax) { gainBall(p); break; }
+      }
+    }
+  }
+}
+
+// ---------- 渲染 ----------
+function render() {
+  ctx.clearRect(0, 0, CW, CH);
+  drawCourt();
+  const ps = G.players.slice().sort((a, b) => a.y - b.y);
+  for (const p of ps) drawPlayer(p);
+  drawBall();
+  if (G.tut) drawTutorial();
+  else drawHUD();
+  if (G.phase === 'freethrow' && G.ft && !G.ft.done) drawFTBar();
+  if (G.msg && G.msgT > 0) drawMsg();
+}
+
+function drawCourt() {
+  const s = G.view.s;
+  ctx.fillStyle = '#b9814a';
+  ctx.fillRect(W2SX(0), W2SY(0), CT_W * s, CT_H * s);
+  ctx.fillStyle = 'rgba(0,0,0,.05)';
+  for (let x = 0; x < CT_W; x += 8) ctx.fillRect(W2SX(x), W2SY(0), 4 * s, CT_H * s);
+  ctx.strokeStyle = '#f5ecd7'; ctx.lineWidth = 2.5;
+  ctx.strokeRect(W2SX(0), W2SY(0), CT_W * s, CT_H * s);
+  line(W2SX(47), W2SY(0), W2SX(47), W2SY(50));
+  circle(W2SX(47), W2SY(25), 6 * s, false);
+  for (const rim of [RIM_L, RIM_R]) {
+    const d = rimDir(rim);
+    ctx.fillStyle = 'rgba(30,58,120,.28)';
+    const px = rim.x > 50 ? 94 - 19 : 0;
+    ctx.fillRect(W2SX(px), W2SY(17), 19 * s, 16 * s);
+    ctx.strokeRect(W2SX(px), W2SY(17), 19 * s, 16 * s);
+    circle(W2SX(rim.x + d * 13.75), W2SY(25), 6 * s, false);
+    const cornerX = rim.x > 50 ? 79.85 : 14.15;
+    const base = rim.x > 50 ? 94 : 0;
+    line(W2SX(base), W2SY(3), W2SX(cornerX), W2SY(3));
+    line(W2SX(base), W2SY(47), W2SX(cornerX), W2SY(47));
+    ctx.beginPath();
+    const a0 = Math.atan2(22, Math.sqrt(THREE_R * THREE_R - 22 * 22));
+    if (rim.x > 50) ctx.arc(W2SX(rim.x), W2SY(rim.y), THREE_R * s, Math.PI - a0, Math.PI + a0);
+    else ctx.arc(W2SX(rim.x), W2SY(rim.y), THREE_R * s, -a0, a0);
+    ctx.stroke();
+    ctx.strokeStyle = '#fff';
+    const bx = rim.x > 50 ? 90 : 4;
+    line(W2SX(bx), W2SY(22), W2SX(bx), W2SY(28));
+    ctx.strokeStyle = '#ff7a1a'; ctx.lineWidth = 3;
+    circle(W2SX(rim.x), W2SY(rim.y), 0.9 * s, false);
+    ctx.strokeStyle = '#f5ecd7'; ctx.lineWidth = 2.5;
+  }
+}
+
+function drawPlayer(p) {
+  const s = G.view.s;
+  const jumpPhase = p.jumpT > 0 ? Math.sin((1 - p.jumpT / 0.55) * Math.PI) : 0;
+  const sx = W2SX(p.x), sy = W2SY(p.y) - jumpPhase * 1.6 * s;
+  ctx.fillStyle = 'rgba(0,0,0,.25)';
+  ctx.beginPath(); ctx.ellipse(W2SX(p.x), W2SY(p.y) + 0.7 * s, 1.1 * s, 0.5 * s, 0, 0, Math.PI * 2); ctx.fill();
+  if (p === user() || p === p2()) {
+    ctx.strokeStyle = RING[p === user() ? 0 : 1]; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.ellipse(W2SX(p.x), W2SY(p.y) + 0.7 * s, 1.6 * s, 0.8 * s, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = RING[p === user() ? 0 : 1];
+    ctx.font = `bold ${Math.round(0.9 * s)}px sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.fillText(p === user() ? 'P1' : 'P2', sx, sy - 1.6 * s);
+  }
+  ctx.fillStyle = p.staggerT > 0 ? '#888' : COLORS[p.team];
+  ctx.strokeStyle = COLORS_DK[p.team]; ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.arc(sx, sy, 1.1 * s, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#fff'; ctx.font = `bold ${Math.round(1.1 * s)}px sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(p.num, sx, sy);
+  if (p.charge) {
+    const w = 4 * s, h = 0.7 * s, bx = sx - w / 2, by = sy - 2.4 * s;
+    ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(bx, by, w, h);
+    ctx.fillStyle = 'rgba(124,242,154,.4)'; ctx.fillRect(bx + w * .62, by, w * .3, h);
+    ctx.fillStyle = p.charge.v >= .62 && p.charge.v <= .92 ? '#7cf29a' : '#ffb84d';
+    ctx.fillRect(bx, by, w * clamp(p.charge.v, 0, 1), h);
+  }
+}
+
+function drawBall() {
+  const b = G.ball, s = G.view.s;
+  if (!b) return;
+  ctx.fillStyle = 'rgba(0,0,0,.3)';
+  ctx.beginPath(); ctx.ellipse(W2SX(b.x), W2SY(b.y), 0.5 * s, 0.25 * s, 0, 0, Math.PI * 2); ctx.fill();
+  const sx = W2SX(b.x), sy = W2SY(b.y) - b.z * s * 0.55;
+  ctx.fillStyle = '#f97316'; ctx.strokeStyle = '#7c2d12'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(sx, sy, 0.5 * s, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  const me = user();
+  if (me && handler() === me && G.phase === 'live') {
+    ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.setLineDash([6, 6]);
+    line(W2SX(me.x), W2SY(me.y), mouse.sx, mouse.sy);
+    ctx.setLineDash([]);
+  }
+}
+
+function drawHUD() {
+  ctx.fillStyle = 'rgba(10,15,22,.85)';
+  ctx.fillRect(0, 0, CW, 54);
+  ctx.textBaseline = 'middle';
+  ctx.font = '900 26px sans-serif'; ctx.textAlign = 'left';
+  ctx.fillStyle = COLORS[0]; ctx.fillText((G.twoP ? '蓝队(P1) ' : '蓝队 ') + G.scores[0], 24, 28);
+  ctx.textAlign = 'right'; ctx.fillStyle = COLORS[1]; ctx.fillText(G.scores[1] + (G.twoP ? ' 红队(P2)' : ' 红队'), CW - 24, 28);
+  // 球权指示
+  ctx.fillStyle = COLORS[G.offense];
+  ctx.beginPath(); ctx.arc(G.offense === 0 ? 170 : CW - 170, 28, 6, 0, Math.PI * 2); ctx.fill();
+  ctx.textAlign = 'center';
+  ctx.fillStyle = G.shotClock < 5 ? '#ff5a5a' : '#f5ecd7';
+  ctx.font = '900 30px monospace';
+  ctx.fillText(Math.max(0, Math.ceil(G.shotClock)), CW / 2, 27);
+  ctx.font = '12px sans-serif'; ctx.fillStyle = '#9fb0c8';
+  ctx.fillText('目标 ' + TARGET_SCORE + ' 分', CW / 2, 47);
+  ctx.textAlign = 'left'; ctx.font = 'bold 14px sans-serif';
+  ctx.fillStyle = G.tactic[0] === 'man' ? '#7cf29a' : '#ffd58a';
+  ctx.fillText('蓝队防守：' + (G.tactic[0] === 'man' ? '人盯人 [1]' : '区域联防 [2]'), 200, 28);
+  if (G.twoP) {
+    ctx.textAlign = 'right';
+    ctx.fillStyle = G.tactic[1] === 'man' ? '#7cf29a' : '#ffd58a';
+    ctx.fillText((G.tactic[1] === 'man' ? '人盯人 [9]' : '区域联防 [0]') + ' ：红队防守', CW - 200, 28);
+  }
+  const h = handler();
+  if (G.mustClear && h && h.team === 0) {
+    ctx.textAlign = 'left';
+    ctx.fillStyle = (Math.floor(G.time * 3) % 2) ? '#ff5a5a' : '#ffd58a';
+    ctx.fillText('⚠ 先洗球出三分线', 370, 28);
+  }
+  if (halfcourt()) {
+    ctx.textAlign = 'left'; ctx.font = '13px sans-serif'; ctx.fillStyle = '#9fb0c8';
+    const x = 950; let y = 110;
+    const lines = G.twoP ? [
+      '—— P1 蓝队 ——', 'WASD 移动', '空格 投篮/起跳', 'E 传球 · F 抢断', '左Shift 加速 · 1/2 战术',
+      '—— P2 红队 ——', '方向键 移动', '. 投篮/起跳', ', 传球 · / 抢断', '右Shift 加速 · 9/0 战术', 'Esc 暂停',
+    ] : [
+      '—— 操作 ——', 'WASD 移动', '空格/左键 蓄力投篮', 'E/右键 传球', '防守时：', '空格 起跳盖帽/抢板', 'F/右键 抢断', '1 盯人 · 2 联防', 'Shift 加速', 'Esc 暂停',
+    ];
+    for (const l of lines) { ctx.fillText(l, x, y); y += 24; }
+  }
+}
+
+function drawFTBar() {
+  const ft = G.ft;
+  const w = 340, h = 26, x = CW / 2 - w / 2, y = CH - 90;
+  ctx.fillStyle = 'rgba(10,15,22,.85)'; ctx.fillRect(x - 16, y - 40, w + 32, h + 76);
+  ctx.fillStyle = '#f5ecd7'; ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'center';
+  const who = ft.shooter === user() ? '按 空格 出手' : ft.shooter === p2() ? '按 . 出手' : '对方罚球';
+  ctx.fillText(`罚球 ${ft.total - ft.left + 1}/${ft.total} · ${who}`, CW / 2, y - 18);
+  ctx.fillStyle = '#223048'; ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = 'rgba(124,242,154,.5)'; ctx.fillRect(x + w * 0.42, y, w * 0.16, h);
+  ctx.fillStyle = '#ff5a5a'; ctx.fillRect(x + ft.marker * w - 2, y - 4, 4, h + 8);
+}
+
+function drawTutorial() {
+  const T = G.tut;
+  // 目标光圈
+  if (T.marker) {
+    const s = G.view.s, r = (2 + Math.sin(G.time * 5) * 0.3) * s;
+    ctx.strokeStyle = '#7cf29a'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(W2SX(T.marker.x), W2SY(T.marker.y), r, 0, Math.PI * 2); ctx.stroke();
+  }
+  // 顶部说明面板
+  ctx.fillStyle = 'rgba(10,15,22,.88)';
+  ctx.fillRect(CW / 2 - 380, 12, 760, 74);
+  ctx.strokeStyle = '#ffb84d'; ctx.lineWidth = 2;
+  ctx.strokeRect(CW / 2 - 380, 12, 760, 74);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ffd58a'; ctx.font = 'bold 15px sans-serif';
+  ctx.fillText(`新手教程  ${T.i + 1} / ${T_STEPS.length}`, CW / 2, 32);
+  ctx.fillStyle = '#f5ecd7'; ctx.font = 'bold 20px sans-serif';
+  ctx.fillText(T_STEPS[T.i].text, CW / 2, 62);
+}
+
+function drawMsg() {
+  ctx.globalAlpha = clamp(G.msgT, 0, 1);
+  ctx.font = '900 42px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.lineWidth = 8;
+  ctx.strokeText(G.msg, CW / 2, CH * 0.32);
+  ctx.fillStyle = '#ffd58a';
+  ctx.fillText(G.msg, CW / 2, CH * 0.32);
+  ctx.globalAlpha = 1;
+}
+
+function line(x1, y1, x2, y2) { ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); }
+function circle(x, y, r, fill) { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); fill ? ctx.fill() : ctx.stroke(); }
+
+// ---------- 暂停/菜单接线 ----------
+function togglePause() {
+  if (G.screen !== 'play' || G.phase === 'gameover') return;
+  G.paused = !G.paused;
+  document.getElementById('pause').classList.toggle('hidden', !G.paused);
+}
+
+const $ = id => document.getElementById(id);
+let selMode = '3v3', selTac = 'man', selVs = '1p';
+document.querySelectorAll('.mode-btn').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.mode-btn').forEach(x => x.classList.remove('selected'));
+  b.classList.add('selected'); selMode = b.dataset.mode;
+});
+document.querySelectorAll('.vs-btn').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.vs-btn').forEach(x => x.classList.remove('selected'));
+  b.classList.add('selected'); selVs = b.dataset.vs;
+});
+document.querySelectorAll('.tac-btn').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.tac-btn').forEach(x => x.classList.remove('selected'));
+  b.classList.add('selected'); selTac = b.dataset.tac;
+});
+$('startBtn').onclick = () => { $('menu').classList.add('hidden'); G.screen = 'play'; newGame(selMode, selTac, selVs === '2p'); };
+$('tutBtn').onclick = () => { $('menu').classList.add('hidden'); G.screen = 'play'; startTutorial(); };
+$('resumeBtn').onclick = togglePause;
+$('pauseBtn').onclick = togglePause;
+$('restartBtn').onclick = () => {
+  $('pause').classList.add('hidden'); G.paused = false;
+  if (G.tut) startTutorial(); else newGame(G.mode, G.tactic[0], G.twoP);
+};
+$('quitBtn').onclick = () => { $('pause').classList.add('hidden'); G.paused = false; G.tut = null; G.screen = 'menu'; $('menu').classList.remove('hidden'); };
+$('againBtn').onclick = () => { $('gameover').classList.add('hidden'); newGame(G.mode, G.tactic[0], G.twoP); };
+$('menuBtn').onclick = () => { $('gameover').classList.add('hidden'); G.screen = 'menu'; $('menu').classList.remove('hidden'); };
+
+// ---------- 主循环 ----------
+fitView();
+let lastT = performance.now();
+function frame(t) {
+  requestAnimationFrame(frame);
+  const dt = Math.min((t - lastT) / 1000, 0.033);
+  lastT = t;
+  if (G.screen === 'play') {
+    if (!G.paused) update(dt);
+    render();
+  }
+}
+requestAnimationFrame(frame);
+
+</script>
+</body>
+</html>
